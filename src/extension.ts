@@ -61,6 +61,16 @@ renderer.code = function(code: string, language: string | undefined): string {
         return `<div class="mermaid">${escapeHtml(code)}</div>`;
     }
     
+    // ASCII flowcharts - convert to Mermaid
+    if (language === 'flow' || language === 'flowchart' || language === 'asciiflow' || language === 'ascii-flow') {
+        const mermaid = convertAsciiFlowchart(code);
+        if (mermaid) {
+            return `<div class="mermaid">${escapeHtml(mermaid)}</div>`;
+        }
+        // Fallback to code block if conversion fails
+        return `<pre><code>${escapeHtml(code)}</code></pre>`;
+    }
+    
     // ASCII art tables (detect and convert)
     if (language === 'table' || language === 'ascii-table') {
         return convertAsciiTable(code);
@@ -169,13 +179,156 @@ function convertAsciiTable(ascii: string): string {
 }
 
 // Also detect ASCII tables in regular text (not in code blocks)
-function preprocessContent(content: string): string {
-    // Convert ASCII box-style tables (not markdown pipe tables)
-    // Only match tables with + borders like:
-    // +------+------+
-    // | Cell | Cell |
-    // +------+------+
+// Convert ASCII flowchart to Mermaid
+function convertAsciiFlowchart(ascii: string): string {
+    const lines = ascii.split('\n');
+    const nodes: Map<string, {id: string, label: string, type: 'box' | 'diamond' | 'rounded'}> = new Map();
+    const connections: Array<{from: string, to: string, label?: string}> = [];
     
+    let nodeId = 0;
+    const getNodeId = () => `N${nodeId++}`;
+    
+    // Find all boxes: [text], (text), {text}
+    // Note: Using simpler patterns to avoid regex issues
+    
+    // Track positions of nodes
+    const nodePositions: Map<string, {row: number, col: number}> = new Map();
+    
+    // First pass: find all nodes
+    lines.forEach((line, rowIdx) => {
+        // Look for box patterns: [text]
+        let match;
+        const boxRegex = /\[([^\]]+)\]/g;
+        while ((match = boxRegex.exec(line)) !== null) {
+            const label = match[1].trim();
+            const id = getNodeId();
+            nodes.set(label, {id, label, type: 'box'});
+            nodePositions.set(label, {row: rowIdx, col: match.index});
+        }
+        
+        // Look for rounded boxes: (text)
+        const roundedRegex = /\(([^)]+)\)/g;
+        while ((match = roundedRegex.exec(line)) !== null) {
+            const label = match[1].trim();
+            if (!nodes.has(label)) {
+                const id = getNodeId();
+                nodes.set(label, {id, label, type: 'rounded'});
+                nodePositions.set(label, {row: rowIdx, col: match.index});
+            }
+        }
+        
+        // Look for diamonds: {text}
+        const diamondRegex = /\{([^}]+)\}/g;
+        while ((match = diamondRegex.exec(line)) !== null) {
+            const label = match[1].trim();
+            if (!nodes.has(label)) {
+                const id = getNodeId();
+                nodes.set(label, {id, label, type: 'diamond'});
+                nodePositions.set(label, {row: rowIdx, col: match.index});
+            }
+        }
+    });
+    
+    // Second pass: find connections (arrows)
+    // Look for: -->, --->, --, |, v, V, ^, arrows between nodes
+    const fullText = lines.join('\n');
+    
+    // Simple arrow patterns: [A] --> [B] or [A] -> [B]
+    const arrowPattern = /\[([^\]]+)\]\s*[-=]+>\s*\[([^\]]+)\]/g;
+    let arrowMatch;
+    while ((arrowMatch = arrowPattern.exec(fullText)) !== null) {
+        const from = arrowMatch[1].trim();
+        const to = arrowMatch[2].trim();
+        if (nodes.has(from) && nodes.has(to)) {
+            connections.push({from, to});
+        }
+    }
+    
+    // Also check for vertical connections (| or v below a node)
+    for (let i = 0; i < lines.length - 1; i++) {
+        const line = lines[i];
+        const nextLines = lines.slice(i + 1, i + 4).join('\n');
+        
+        // Find nodes on this line and check for vertical arrows below
+        nodes.forEach((node, label) => {
+            const pos = nodePositions.get(label);
+            if (pos && pos.row === i) {
+                // Check for | or v below this position
+                for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+                    const belowLine = lines[j];
+                    // Look for another node roughly below
+                    nodes.forEach((targetNode, targetLabel) => {
+                        const targetPos = nodePositions.get(targetLabel);
+                        if (targetPos && targetPos.row === j && 
+                            Math.abs(targetPos.col - pos.col) < 10 &&
+                            label !== targetLabel) {
+                            // Check if there's a | or v between them
+                            let hasConnection = false;
+                            for (let k = i + 1; k < j; k++) {
+                                if (lines[k].includes('|') || lines[k].includes('v') || lines[k].includes('V')) {
+                                    hasConnection = true;
+                                    break;
+                                }
+                            }
+                            if (hasConnection && !connections.some(c => c.from === label && c.to === targetLabel)) {
+                                connections.push({from: label, to: targetLabel});
+                            }
+                        }
+                    });
+                }
+            }
+        });
+    }
+    
+    // If we found nodes and connections, generate Mermaid
+    if (nodes.size > 0 && connections.length > 0) {
+        let mermaid = 'graph TD\n';
+        
+        // Define nodes
+        nodes.forEach((node, label) => {
+            switch (node.type) {
+                case 'diamond':
+                    mermaid += `    ${node.id}{${node.label}}\n`;
+                    break;
+                case 'rounded':
+                    mermaid += `    ${node.id}(${node.label})\n`;
+                    break;
+                default:
+                    mermaid += `    ${node.id}[${node.label}]\n`;
+            }
+        });
+        
+        // Define connections
+        connections.forEach(conn => {
+            const fromNode = nodes.get(conn.from);
+            const toNode = nodes.get(conn.to);
+            if (fromNode && toNode) {
+                if (conn.label) {
+                    mermaid += `    ${fromNode.id} -->|${conn.label}| ${toNode.id}\n`;
+                } else {
+                    mermaid += `    ${fromNode.id} --> ${toNode.id}\n`;
+                }
+            }
+        });
+        
+        return mermaid;
+    }
+    
+    // Fallback: return original
+    return '';
+}
+
+function preprocessContent(content: string): string {
+    // First pass: Convert ASCII flowcharts in code blocks
+    content = content.replace(/```(?:ascii-?flow(?:chart)?|flow)\n([\s\S]*?)```/gi, (match, ascii) => {
+        const mermaid = convertAsciiFlowchart(ascii);
+        if (mermaid) {
+            return '```mermaid\n' + mermaid + '```';
+        }
+        return match;
+    });
+    
+    // Second pass: Convert ASCII box-style tables
     const lines = content.split('\n');
     const result: string[] = [];
     let inAsciiTable = false;
@@ -186,17 +339,14 @@ function preprocessContent(content: string): string {
         
         // Detect ASCII box table (starts with + and has +---+ pattern)
         const isBoxBorder = /^\+[-=+]+\+$/.test(trimmed);
-        const isBoxRow = /^\|.*\|$/.test(trimmed) && tableLines.some(l => /^\+[-=+]+\+$/.test(l.trim()));
         
         if (isBoxBorder && !inAsciiTable) {
-            // Start of ASCII box table
             inAsciiTable = true;
             tableLines.push(line);
         } else if (inAsciiTable) {
             if (isBoxBorder || /^\|.*\|$/.test(trimmed)) {
                 tableLines.push(line);
             } else {
-                // End of table - convert it
                 if (tableLines.length > 2) {
                     result.push('```table');
                     result.push(...tableLines);
@@ -213,7 +363,6 @@ function preprocessContent(content: string): string {
         }
     }
     
-    // Handle table at end of content
     if (tableLines.length > 2) {
         result.push('```table');
         result.push(...tableLines);
