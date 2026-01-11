@@ -395,11 +395,15 @@ blockquote p:last-child {
     margin-bottom: 0;
 }
 
-/* Tables */
+/* Tables - Beautiful styling for all tables */
 table {
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 1.5rem;
+    border: 1px solid var(--paper-lighter);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 th, td {
@@ -410,41 +414,29 @@ th, td {
 
 th {
     font-weight: 600;
-    color: var(--ink-faded);
+    color: var(--paper);
     text-transform: uppercase;
     font-size: 0.8rem;
     letter-spacing: 0.05em;
-    background: var(--paper-light);
-}
-
-tr:hover {
-    background: var(--paper-light);
-}
-
-/* ASCII Tables - enhanced styling */
-table.ascii-table {
-    border: 1px solid var(--accent);
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-table.ascii-table th {
     background: var(--accent);
-    color: var(--paper);
     border-bottom: none;
 }
 
-table.ascii-table td {
-    border-bottom: 1px solid var(--paper-lighter);
+tbody tr:hover {
+    background: var(--accent-glow);
 }
 
-table.ascii-table tr:last-child td {
-    border-bottom: none;
-}
-
-table.ascii-table tr:nth-child(even) {
+tbody tr:nth-child(even) {
     background: var(--paper-light);
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* ASCII Tables - same styling, class kept for compatibility */
+table.ascii-table {
+    /* Inherits all table styles */
 }
 
 /* Mermaid diagrams */

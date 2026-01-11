@@ -170,29 +170,34 @@ function convertAsciiTable(ascii: string): string {
 
 // Also detect ASCII tables in regular text (not in code blocks)
 function preprocessContent(content: string): string {
-    // Convert ASCII tables that aren't in code blocks
-    // Look for lines that look like table borders
+    // Convert ASCII box-style tables (not markdown pipe tables)
+    // Only match tables with + borders like:
+    // +------+------+
+    // | Cell | Cell |
+    // +------+------+
+    
     const lines = content.split('\n');
     const result: string[] = [];
-    let inTable = false;
+    let inAsciiTable = false;
     let tableLines: string[] = [];
     
     for (const line of lines) {
         const trimmed = line.trim();
         
-        // Detect table start (border line or pipe-separated content)
-        const isTableBorder = /^[+\-=]+[+\-=|]+[+\-=]+$/.test(trimmed);
-        const isTableRow = /^\|.*\|$/.test(trimmed) && !trimmed.startsWith('|--');
+        // Detect ASCII box table (starts with + and has +---+ pattern)
+        const isBoxBorder = /^\+[-=+]+\+$/.test(trimmed);
+        const isBoxRow = /^\|.*\|$/.test(trimmed) && tableLines.some(l => /^\+[-=+]+\+$/.test(l.trim()));
         
-        if (isTableBorder || (isTableRow && !inTable)) {
-            inTable = true;
+        if (isBoxBorder && !inAsciiTable) {
+            // Start of ASCII box table
+            inAsciiTable = true;
             tableLines.push(line);
-        } else if (inTable) {
-            if (isTableRow || isTableBorder || /^[|+]/.test(trimmed)) {
+        } else if (inAsciiTable) {
+            if (isBoxBorder || /^\|.*\|$/.test(trimmed)) {
                 tableLines.push(line);
             } else {
-                // End of table
-                if (tableLines.length > 1) {
+                // End of table - convert it
+                if (tableLines.length > 2) {
                     result.push('```table');
                     result.push(...tableLines);
                     result.push('```');
@@ -200,7 +205,7 @@ function preprocessContent(content: string): string {
                     result.push(...tableLines);
                 }
                 tableLines = [];
-                inTable = false;
+                inAsciiTable = false;
                 result.push(line);
             }
         } else {
@@ -209,7 +214,7 @@ function preprocessContent(content: string): string {
     }
     
     // Handle table at end of content
-    if (tableLines.length > 1) {
+    if (tableLines.length > 2) {
         result.push('```table');
         result.push(...tableLines);
         result.push('```');
