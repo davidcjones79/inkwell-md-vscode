@@ -51,16 +51,177 @@ let currentPanel: vscode.WebviewPanel | undefined = undefined;
 let statusBarItem: vscode.StatusBarItem;
 let currentDocument: vscode.TextDocument | undefined;
 
-// Configure marked with syntax highlighting
-marked.setOptions({
-    highlight: function(code, lang) {
-        if (lang && hljs.getLanguage(lang)) {
-            try {
-                return hljs.highlight(code, { language: lang }).value;
-            } catch (e) {}
-        }
-        return hljs.highlightAuto(code).value;
+// Custom renderer for marked
+const renderer = new marked.Renderer();
+
+// Handle code blocks - check for mermaid and ASCII tables
+renderer.code = function(code: string, language: string | undefined): string {
+    // Mermaid diagrams
+    if (language === 'mermaid') {
+        return `<div class="mermaid">${escapeHtml(code)}</div>`;
     }
+    
+    // ASCII art tables (detect and convert)
+    if (language === 'table' || language === 'ascii-table') {
+        return convertAsciiTable(code);
+    }
+    
+    // Regular code with syntax highlighting
+    if (language && hljs.getLanguage(language)) {
+        try {
+            const highlighted = hljs.highlight(code, { language }).value;
+            return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
+        } catch (e) {}
+    }
+    
+    // Auto-detect language
+    try {
+        const highlighted = hljs.highlightAuto(code).value;
+        return `<pre><code class="hljs">${highlighted}</code></pre>`;
+    } catch (e) {
+        return `<pre><code>${escapeHtml(code)}</code></pre>`;
+    }
+};
+
+function escapeHtml(text: string): string {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Convert ASCII table to HTML table
+function convertAsciiTable(ascii: string): string {
+    const lines = ascii.trim().split('\n');
+    
+    // Detect table format
+    // Format 1: +---+---+ style
+    // Format 2: |---|---| style (markdown)
+    // Format 3: Plain pipe-separated
+    
+    const rows: string[][] = [];
+    let isHeader = true;
+    let headerRowIndex = -1;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Skip separator lines
+        if (/^[+\-=|:\s]+$/.test(line) && !line.includes(' ')) {
+            // Check if this is after the header
+            if (rows.length === 1) {
+                headerRowIndex = 0;
+            }
+            continue;
+        }
+        
+        // Skip empty lines
+        if (!line) continue;
+        
+        // Parse cells
+        let cells: string[];
+        if (line.startsWith('|')) {
+            // Pipe-delimited
+            cells = line.split('|')
+                .slice(1, -1) // Remove first and last empty elements
+                .map(c => c.trim());
+        } else if (line.includes('|')) {
+            cells = line.split('|').map(c => c.trim());
+        } else if (line.includes('\t')) {
+            cells = line.split('\t').map(c => c.trim());
+        } else {
+            // Try to split by multiple spaces
+            cells = line.split(/\s{2,}/).map(c => c.trim());
+        }
+        
+        if (cells.length > 0 && cells.some(c => c.length > 0)) {
+            rows.push(cells);
+        }
+    }
+    
+    if (rows.length === 0) {
+        return `<pre><code>${escapeHtml(ascii)}</code></pre>`;
+    }
+    
+    // Build HTML table
+    let html = '<table class="ascii-table">';
+    
+    rows.forEach((row, i) => {
+        if (i === headerRowIndex || (headerRowIndex === -1 && i === 0)) {
+            html += '<thead><tr>';
+            row.forEach(cell => {
+                html += `<th>${escapeHtml(cell)}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+        } else {
+            html += '<tr>';
+            row.forEach(cell => {
+                html += `<td>${escapeHtml(cell)}</td>`;
+            });
+            html += '</tr>';
+        }
+    });
+    
+    html += '</tbody></table>';
+    return html;
+}
+
+// Also detect ASCII tables in regular text (not in code blocks)
+function preprocessContent(content: string): string {
+    // Convert ASCII tables that aren't in code blocks
+    // Look for lines that look like table borders
+    const lines = content.split('\n');
+    const result: string[] = [];
+    let inTable = false;
+    let tableLines: string[] = [];
+    
+    for (const line of lines) {
+        const trimmed = line.trim();
+        
+        // Detect table start (border line or pipe-separated content)
+        const isTableBorder = /^[+\-=]+[+\-=|]+[+\-=]+$/.test(trimmed);
+        const isTableRow = /^\|.*\|$/.test(trimmed) && !trimmed.startsWith('|--');
+        
+        if (isTableBorder || (isTableRow && !inTable)) {
+            inTable = true;
+            tableLines.push(line);
+        } else if (inTable) {
+            if (isTableRow || isTableBorder || /^[|+]/.test(trimmed)) {
+                tableLines.push(line);
+            } else {
+                // End of table
+                if (tableLines.length > 1) {
+                    result.push('```table');
+                    result.push(...tableLines);
+                    result.push('```');
+                } else {
+                    result.push(...tableLines);
+                }
+                tableLines = [];
+                inTable = false;
+                result.push(line);
+            }
+        } else {
+            result.push(line);
+        }
+    }
+    
+    // Handle table at end of content
+    if (tableLines.length > 1) {
+        result.push('```table');
+        result.push(...tableLines);
+        result.push('```');
+    } else if (tableLines.length > 0) {
+        result.push(...tableLines);
+    }
+    
+    return result.join('\n');
+}
+
+marked.setOptions({
+    renderer: renderer
 });
 
 export function activate(context: vscode.ExtensionContext) {
@@ -222,8 +383,11 @@ function updatePreview(context: vscode.ExtensionContext, document: vscode.TextDo
     // Extract TOC
     const toc = extractTOC(content);
     
+    // Preprocess content (convert ASCII tables)
+    const processedContent = preprocessContent(content);
+    
     // Render markdown
-    const html = marked.parse(content) as string;
+    const html = marked.parse(processedContent) as string;
     
     // Get VS Code theme
     const theme = vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ? 'dark' : 'light';
@@ -393,11 +557,12 @@ function getWebviewContent(context: vscode.ExtensionContext, webview: vscode.Web
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline' https://fonts.googleapis.com; script-src 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src * data: ${webview.cspSource};">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; script-src 'unsafe-inline' https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com; img-src * data: ${webview.cspSource};">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="${styleUri}" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <title>Inkwell Preview</title>
 </head>
 <body data-theme="dark">
@@ -552,6 +717,19 @@ function getWebviewContent(context: vscode.ExtensionContext, webview: vscode.Web
                         if (currentToc[i]) {
                             headings[i].setAttribute('data-line', currentToc[i].line);
                             headings[i].id = 'heading-' + i;
+                        }
+                    }
+                    
+                    // Initialize Mermaid diagrams
+                    if (typeof mermaid !== 'undefined') {
+                        try {
+                            mermaid.initialize({ 
+                                startOnLoad: false,
+                                theme: body.getAttribute('data-theme') === 'dark' ? 'dark' : 'default'
+                            });
+                            mermaid.run({ nodes: preview.querySelectorAll('.mermaid') });
+                        } catch (e) {
+                            console.error('Mermaid error:', e);
                         }
                     }
                     break;
