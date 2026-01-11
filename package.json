@@ -11,6 +11,8 @@
     "Other"
   ],
   "activationEvents": [
+    "onCommand:inkwell.showPreview",
+    "onCommand:inkwell.showPreviewToSide",
     "onLanguage:markdown"
   ],
   "main": "./out/extension.js",
