@@ -13,7 +13,13 @@
   "activationEvents": [
     "onCommand:inkwell.showPreview",
     "onCommand:inkwell.showPreviewToSide",
-    "onLanguage:markdown"
+    "onLanguage:markdown",
+    "onLanguage:html",
+    "onLanguage:css",
+    "onLanguage:json",
+    "onLanguage:python",
+    "onLanguage:javascript",
+    "onLanguage:typescript"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -52,7 +58,7 @@
     "menus": {
       "editor/title": [
         {
-          "when": "resourceLangId == markdown",
+          "when": "resourceLangId =~ /markdown|html|css|json|python|javascript|typescript/",
           "command": "inkwell.showPreviewToSide",
           "group": "navigation"
         }
@@ -60,11 +66,11 @@
       "commandPalette": [
         {
           "command": "inkwell.showPreview",
-          "when": "resourceLangId == markdown"
+          "when": "resourceLangId =~ /markdown|html|css|json|python|javascript|typescript/"
         },
         {
           "command": "inkwell.showPreviewToSide",
-          "when": "resourceLangId == markdown"
+          "when": "resourceLangId =~ /markdown|html|css|json|python|javascript|typescript/"
         }
       ]
     },
@@ -73,7 +79,7 @@
         "command": "inkwell.showPreviewToSide",
         "key": "ctrl+shift+v",
         "mac": "cmd+shift+v",
-        "when": "resourceLangId == markdown"
+        "when": "resourceLangId =~ /markdown|html|css|json|python|javascript|typescript/"
       }
     ]
   },
@@ -92,7 +98,8 @@
   "dependencies": {
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.11.1",
-    "marked": "^9.0.0"
+    "marked": "^9.0.0",
+    "mermaid": "^11.12.2"
   },
   "repository": {
     "type": "git",

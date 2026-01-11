@@ -528,3 +528,93 @@ mark {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--accent);
 }
+
+
+/* Preview sections for non-markdown files */
+.preview-section {
+    margin-bottom: 2rem;
+}
+
+.preview-section h2 {
+    font-size: 1.1rem;
+    color: var(--accent);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--paper-lighter);
+}
+
+.preview-section.error {
+    background: rgba(255, 100, 100, 0.1);
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 3px solid #ff6464;
+}
+
+.error-message {
+    color: #ff6464;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+}
+
+/* Color palette for CSS preview */
+.color-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.color-swatch {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    border: 2px solid var(--paper-lighter);
+    cursor: pointer;
+    transition: transform 0.15s;
+}
+
+.color-swatch:hover {
+    transform: scale(1.1);
+}
+
+/* JSON preview styles */
+.json-summary {
+    background: var(--paper-light);
+    padding: 1rem;
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    line-height: 1.8;
+}
+
+.json-key {
+    color: var(--accent);
+}
+
+.json-type {
+    color: var(--ink-faded);
+    font-style: italic;
+}
+
+.json-null {
+    color: #ff6464;
+}
+
+.json-ellipsis {
+    color: var(--ink-ghost);
+}
+
+.json-object {
+    padding-left: 1rem;
+    border-left: 2px solid var(--paper-lighter);
+}
+
+/* HTML preview iframe */
+.html-preview-frame {
+    background: var(--paper-light);
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.html-preview-frame iframe {
+    background: white;
+}

@@ -414,7 +414,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Update on document changes
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument((e) => {
-            if (currentPanel && e.document.languageId === 'markdown') {
+            if (currentPanel && SUPPORTED_LANGUAGES.includes(e.document.languageId)) {
                 updatePreview(context, e.document);
                 updateStatusBar(e.document);
             }
@@ -424,7 +424,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Update on active editor change
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor((editor) => {
-            if (editor && editor.document.languageId === 'markdown') {
+            if (editor && SUPPORTED_LANGUAGES.includes(editor.document.languageId)) {
                 updateStatusBar(editor.document);
                 if (currentPanel) {
                     updatePreview(context, editor.document);
@@ -438,7 +438,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Handle scroll sync from editor
     context.subscriptions.push(
         vscode.window.onDidChangeTextEditorVisibleRanges((e) => {
-            if (currentPanel && e.textEditor.document.languageId === 'markdown') {
+            if (currentPanel && SUPPORTED_LANGUAGES.includes(e.textEditor.document.languageId)) {
                 const visibleRange = e.visibleRanges[0];
                 if (visibleRange) {
                     const line = visibleRange.start.line;
@@ -454,15 +454,17 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     // Initial status bar update
-    if (vscode.window.activeTextEditor?.document.languageId === 'markdown') {
+    if (vscode.window.activeTextEditor && SUPPORTED_LANGUAGES.includes(vscode.window.activeTextEditor.document.languageId)) {
         updateStatusBar(vscode.window.activeTextEditor.document);
     }
 }
 
+const SUPPORTED_LANGUAGES = ['markdown', 'html', 'css', 'json', 'python', 'javascript', 'typescript'];
+
 function showPreview(context: vscode.ExtensionContext, viewColumn: vscode.ViewColumn) {
     const editor = vscode.window.activeTextEditor;
-    if (!editor || editor.document.languageId !== 'markdown') {
-        vscode.window.showWarningMessage('Open a Markdown file to preview');
+    if (!editor || !SUPPORTED_LANGUAGES.includes(editor.document.languageId)) {
+        vscode.window.showWarningMessage('Open a supported file to preview (Markdown, HTML, CSS, JSON, Python, JS, TS)');
         return;
     }
 
@@ -511,7 +513,7 @@ function showPreview(context: vscode.ExtensionContext, viewColumn: vscode.ViewCo
 
 function scrollEditorToLine(line: number) {
     const editor = vscode.window.activeTextEditor;
-    if (editor && editor.document.languageId === 'markdown') {
+    if (editor && SUPPORTED_LANGUAGES.includes(editor.document.languageId)) {
         const position = new vscode.Position(line, 0);
         editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.AtTop);
     }
@@ -522,39 +524,320 @@ function updatePreview(context: vscode.ExtensionContext, document: vscode.TextDo
     
     currentDocument = document;
     const text = document.getText();
-    
-    // Parse frontmatter
-    let frontmatter: Record<string, any> = {};
-    let content = text;
-    try {
-        const parsed = matter(text);
-        frontmatter = parsed.data;
-        content = parsed.content;
-    } catch (e) {
-        // No frontmatter or parse error
-    }
-    
-    // Extract TOC
-    const toc = extractTOC(content);
-    
-    // Preprocess content (convert ASCII tables)
-    const processedContent = preprocessContent(content);
-    
-    // Render markdown
-    const html = marked.parse(processedContent) as string;
+    const languageId = document.languageId;
     
     // Get VS Code theme
     const theme = vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ? 'dark' : 'light';
     
+    let html: string;
+    let toc: Array<{level: number, text: string, line: number}> = [];
+    let frontmatter: Record<string, any> = {};
+    let fileType = 'markdown';
+    
+    switch (languageId) {
+        case 'html':
+            // Render HTML directly in an iframe or sanitized
+            html = renderHTMLPreview(text);
+            toc = extractHTMLToc(text);
+            fileType = 'html';
+            break;
+            
+        case 'css':
+            // Show CSS with syntax highlighting and a preview
+            html = renderCSSPreview(text);
+            toc = extractCSSToc(text);
+            fileType = 'css';
+            break;
+            
+        case 'json':
+            // Pretty print JSON with collapsible sections
+            html = renderJSONPreview(text);
+            toc = extractJSONToc(text);
+            fileType = 'json';
+            break;
+            
+        case 'python':
+            // Show Python with syntax highlighting and docstrings
+            html = renderCodePreview(text, 'python');
+            toc = extractPythonToc(text);
+            fileType = 'python';
+            break;
+            
+        case 'javascript':
+        case 'typescript':
+            html = renderCodePreview(text, languageId);
+            toc = extractJSToc(text);
+            fileType = languageId;
+            break;
+            
+        case 'markdown':
+        default:
+            // Parse frontmatter for markdown
+            let content = text;
+            try {
+                const parsed = matter(text);
+                frontmatter = parsed.data;
+                content = parsed.content;
+            } catch (e) {}
+            
+            toc = extractTOC(content);
+            const processedContent = preprocessContent(content);
+            html = marked.parse(processedContent) as string;
+            break;
+    }
+    
     currentPanel.webview.postMessage({
         type: 'update',
         content: html,
-        title: path.basename(document.fileName).replace(/\.md$/, ''),
+        title: path.basename(document.fileName),
         frontmatter,
         toc,
         theme,
+        fileType,
         stats: getDocumentStats(text)
     });
+}
+
+// HTML Preview
+function renderHTMLPreview(html: string): string {
+    // Escape the HTML for display, but also provide a rendered preview
+    const escaped = escapeHtml(html);
+    const highlighted = hljs.highlight(html, { language: 'html' }).value;
+    return `
+        <div class="preview-section">
+            <h2>Rendered Preview</h2>
+            <div class="html-preview-frame">
+                <iframe srcdoc="${escaped.replace(/"/g, '&quot;')}" sandbox="allow-scripts" style="width:100%;height:400px;border:1px solid var(--paper-lighter);border-radius:8px;background:white;"></iframe>
+            </div>
+        </div>
+        <div class="preview-section">
+            <h2>Source Code</h2>
+            <pre><code class="hljs language-html">${highlighted}</code></pre>
+        </div>
+    `;
+}
+
+function extractHTMLToc(html: string): Array<{level: number, text: string, line: number}> {
+    const toc: Array<{level: number, text: string, line: number}> = [];
+    const lines = html.split('\n');
+    
+    lines.forEach((line, index) => {
+        // Match HTML headings
+        const match = line.match(/<h([1-6])[^>]*>([^<]+)<\/h[1-6]>/i);
+        if (match) {
+            toc.push({ level: parseInt(match[1]), text: match[2].trim(), line: index });
+        }
+        // Match important tags
+        const tagMatch = line.match(/<(html|head|body|header|main|footer|nav|section|article|aside)\b/i);
+        if (tagMatch) {
+            toc.push({ level: 2, text: `<${tagMatch[1]}>`, line: index });
+        }
+    });
+    
+    return toc;
+}
+
+// CSS Preview
+function renderCSSPreview(css: string): string {
+    const highlighted = hljs.highlight(css, { language: 'css' }).value;
+    
+    // Extract color values for a palette preview
+    const colors = new Set<string>();
+    const colorRegex = /#[0-9a-fA-F]{3,8}|rgb\([^)]+\)|rgba\([^)]+\)|hsl\([^)]+\)|hsla\([^)]+\)/g;
+    let match;
+    while ((match = colorRegex.exec(css)) !== null) {
+        colors.add(match[0]);
+    }
+    
+    let colorPalette = '';
+    if (colors.size > 0) {
+        colorPalette = `
+            <div class="preview-section">
+                <h2>Color Palette</h2>
+                <div class="color-palette">
+                    ${Array.from(colors).slice(0, 20).map(c => 
+                        `<div class="color-swatch" style="background:${c}" title="${c}"></div>`
+                    ).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    return `
+        ${colorPalette}
+        <div class="preview-section">
+            <h2>Source Code</h2>
+            <pre><code class="hljs language-css">${highlighted}</code></pre>
+        </div>
+    `;
+}
+
+function extractCSSToc(css: string): Array<{level: number, text: string, line: number}> {
+    const toc: Array<{level: number, text: string, line: number}> = [];
+    const lines = css.split('\n');
+    
+    lines.forEach((line, index) => {
+        // Match CSS comments as sections
+        const commentMatch = line.match(/\/\*\s*=+\s*(.+?)\s*=*\s*\*\//);
+        if (commentMatch) {
+            toc.push({ level: 1, text: commentMatch[1].trim(), line: index });
+        }
+        // Match major selectors
+        const selectorMatch = line.match(/^([.#]?[a-zA-Z][a-zA-Z0-9_-]*)\s*\{/);
+        if (selectorMatch && !line.includes('@')) {
+            toc.push({ level: 2, text: selectorMatch[1], line: index });
+        }
+        // Match @rules
+        const atRuleMatch = line.match(/^(@media|@keyframes|@font-face)\s+([^{]+)/);
+        if (atRuleMatch) {
+            toc.push({ level: 1, text: `${atRuleMatch[1]} ${atRuleMatch[2].trim()}`, line: index });
+        }
+    });
+    
+    return toc;
+}
+
+// JSON Preview
+function renderJSONPreview(json: string): string {
+    try {
+        const parsed = JSON.parse(json);
+        const pretty = JSON.stringify(parsed, null, 2);
+        const highlighted = hljs.highlight(pretty, { language: 'json' }).value;
+        
+        // Create a summary
+        const summary = getJSONSummary(parsed);
+        
+        return `
+            <div class="preview-section">
+                <h2>Structure</h2>
+                <div class="json-summary">${summary}</div>
+            </div>
+            <div class="preview-section">
+                <h2>Formatted JSON</h2>
+                <pre><code class="hljs language-json">${highlighted}</code></pre>
+            </div>
+        `;
+    } catch (e) {
+        const highlighted = hljs.highlight(json, { language: 'json' }).value;
+        return `
+            <div class="preview-section error">
+                <h2>⚠️ Invalid JSON</h2>
+                <p class="error-message">${escapeHtml(String(e))}</p>
+            </div>
+            <div class="preview-section">
+                <h2>Source</h2>
+                <pre><code class="hljs language-json">${highlighted}</code></pre>
+            </div>
+        `;
+    }
+}
+
+function getJSONSummary(obj: any, depth: number = 0): string {
+    if (depth > 3) return '<span class="json-ellipsis">...</span>';
+    
+    if (Array.isArray(obj)) {
+        return `<span class="json-type">Array</span>[${obj.length}]`;
+    } else if (obj === null) {
+        return '<span class="json-null">null</span>';
+    } else if (typeof obj === 'object') {
+        const keys = Object.keys(obj);
+        if (keys.length === 0) return '<span class="json-type">Object</span>{}';
+        
+        const items = keys.slice(0, 10).map(key => {
+            const value = obj[key];
+            const valueType = Array.isArray(value) ? `Array[${value.length}]` :
+                             typeof value === 'object' && value !== null ? `Object{${Object.keys(value).length}}` :
+                             typeof value;
+            return `<span class="json-key">${escapeHtml(key)}</span>: <span class="json-type">${valueType}</span>`;
+        });
+        
+        return `<div class="json-object">${items.join('<br>')}</div>` + 
+               (keys.length > 10 ? `<span class="json-ellipsis">...and ${keys.length - 10} more</span>` : '');
+    } else {
+        return `<span class="json-type">${typeof obj}</span>`;
+    }
+}
+
+function extractJSONToc(json: string): Array<{level: number, text: string, line: number}> {
+    const toc: Array<{level: number, text: string, line: number}> = [];
+    try {
+        const parsed = JSON.parse(json);
+        if (typeof parsed === 'object' && parsed !== null) {
+            Object.keys(parsed).slice(0, 20).forEach((key, index) => {
+                const value = parsed[key];
+                const type = Array.isArray(value) ? `[${value.length}]` : typeof value;
+                toc.push({ level: 1, text: `${key}: ${type}`, line: index });
+            });
+        }
+    } catch (e) {}
+    return toc;
+}
+
+// Code Preview (Python, JS, TS)
+function renderCodePreview(code: string, language: string): string {
+    const highlighted = hljs.highlight(code, { language }).value;
+    return `
+        <div class="preview-section">
+            <h2>Source Code</h2>
+            <pre><code class="hljs language-${language}">${highlighted}</code></pre>
+        </div>
+    `;
+}
+
+function extractPythonToc(code: string): Array<{level: number, text: string, line: number}> {
+    const toc: Array<{level: number, text: string, line: number}> = [];
+    const lines = code.split('\n');
+    
+    lines.forEach((line, index) => {
+        // Match class definitions
+        const classMatch = line.match(/^class\s+(\w+)/);
+        if (classMatch) {
+            toc.push({ level: 1, text: `class ${classMatch[1]}`, line: index });
+        }
+        // Match function definitions
+        const funcMatch = line.match(/^(\s*)def\s+(\w+)/);
+        if (funcMatch) {
+            const indent = funcMatch[1].length;
+            toc.push({ level: indent > 0 ? 3 : 2, text: `def ${funcMatch[2]}()`, line: index });
+        }
+        // Match comments that look like sections
+        const commentMatch = line.match(/^#\s*={3,}\s*(.+?)\s*={0,}$/);
+        if (commentMatch) {
+            toc.push({ level: 1, text: commentMatch[1].trim(), line: index });
+        }
+    });
+    
+    return toc;
+}
+
+function extractJSToc(code: string): Array<{level: number, text: string, line: number}> {
+    const toc: Array<{level: number, text: string, line: number}> = [];
+    const lines = code.split('\n');
+    
+    lines.forEach((line, index) => {
+        // Match class definitions
+        const classMatch = line.match(/^(?:export\s+)?class\s+(\w+)/);
+        if (classMatch) {
+            toc.push({ level: 1, text: `class ${classMatch[1]}`, line: index });
+        }
+        // Match function definitions
+        const funcMatch = line.match(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/);
+        if (funcMatch) {
+            toc.push({ level: 2, text: `function ${funcMatch[1]}()`, line: index });
+        }
+        // Match arrow functions assigned to const
+        const arrowMatch = line.match(/^(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\(/);
+        if (arrowMatch) {
+            toc.push({ level: 2, text: `const ${arrowMatch[1]}`, line: index });
+        }
+        // Match interface/type definitions (TypeScript)
+        const typeMatch = line.match(/^(?:export\s+)?(?:interface|type)\s+(\w+)/);
+        if (typeMatch) {
+            toc.push({ level: 1, text: `type ${typeMatch[1]}`, line: index });
+        }
+    });
+    
+    return toc;
 }
 
 function extractTOC(content: string): Array<{level: number, text: string, line: number}> {
@@ -806,22 +1089,31 @@ function getWebviewContent(context: vscode.ExtensionContext, webview: vscode.Web
                 return '<a href="#" class="toc-item toc-h' + item.level + '" data-line="' + item.line + '" data-index="' + i + '">' + escapeHtml(item.text) + '</a>';
             }).join('');
             
-            // Add click handlers
-            var items = tocList.querySelectorAll('.toc-item');
-            for (var i = 0; i < items.length; i++) {
-                items[i].addEventListener('click', function(e) {
+            // Add click handlers using event delegation
+            tocList.onclick = function(e) {
+                var target = e.target;
+                if (target.classList.contains('toc-item')) {
                     e.preventDefault();
-                    var line = parseInt(this.getAttribute('data-line'));
+                    var line = parseInt(target.getAttribute('data-line'));
+                    var index = parseInt(target.getAttribute('data-index'));
+                    
+                    // Tell extension to scroll editor
                     vscode.postMessage({ type: 'tocNavigate', line: line });
+                    
+                    // Scroll preview to heading
+                    var heading = document.getElementById('heading-' + index);
+                    if (heading) {
+                        heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
                     
                     // Highlight active item
                     var allItems = tocList.querySelectorAll('.toc-item');
                     for (var j = 0; j < allItems.length; j++) {
                         allItems[j].classList.remove('active');
                     }
-                    this.classList.add('active');
-                });
-            }
+                    target.classList.add('active');
+                }
+            };
         }
         
         function escapeHtml(text) {
