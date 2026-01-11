@@ -27,6 +27,26 @@
         "command": "inkwell.showPreviewToSide",
         "title": "Inkwell: Open Preview to Side",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "inkwell.exportHTML",
+        "title": "Inkwell: Export to HTML"
+      },
+      {
+        "command": "inkwell.toggleTheme",
+        "title": "Inkwell: Toggle Theme"
+      },
+      {
+        "command": "inkwell.zoomIn",
+        "title": "Inkwell: Zoom In"
+      },
+      {
+        "command": "inkwell.zoomOut",
+        "title": "Inkwell: Zoom Out"
+      },
+      {
+        "command": "inkwell.zoomReset",
+        "title": "Inkwell: Reset Zoom"
       }
     ],
     "menus": {
@@ -70,6 +90,8 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "gray-matter": "^4.0.3",
+    "highlight.js": "^11.11.1",
     "marked": "^9.0.0"
   },
   "repository": {
