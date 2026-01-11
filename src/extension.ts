@@ -415,7 +415,7 @@ function getWebviewContent(context: vscode.ExtensionContext, webview: vscode.Web
         <nav id="tocList"></nav>
     </aside>
     
-    <div class="container">
+    <div class="container" id="container">
         <header id="docHeader">
             <div id="frontmatter" class="frontmatter"></div>
             <h1 class="doc-title" id="docTitle">Document</h1>
@@ -435,46 +435,85 @@ function getWebviewContent(context: vscode.ExtensionContext, webview: vscode.Web
         const tocList = document.getElementById('tocList');
         const statsEl = document.getElementById('stats');
         const zoomLevelEl = document.getElementById('zoomLevel');
-        const container = document.querySelector('.container');
+        const container = document.getElementById('container');
+        const body = document.body;
         
         let currentZoom = 100;
         let tocVisible = false;
         let scrollSyncEnabled = true;
+        let currentToc = [];
         
         // Toolbar buttons
-        document.getElementById('tocToggle').addEventListener('click', () => {
+        document.getElementById('tocToggle').addEventListener('click', function() {
             tocVisible = !tocVisible;
             tocEl.classList.toggle('visible', tocVisible);
-            container.classList.toggle('with-toc', tocVisible);
+            body.classList.toggle('toc-open', tocVisible);
         });
         
-        document.getElementById('themeToggle').addEventListener('click', () => {
-            const current = document.body.getAttribute('data-theme');
-            document.body.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+        document.getElementById('themeToggle').addEventListener('click', function() {
+            const current = body.getAttribute('data-theme');
+            body.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
         });
         
-        document.getElementById('zoomIn').addEventListener('click', () => {
+        document.getElementById('zoomIn').addEventListener('click', function() {
             currentZoom = Math.min(200, currentZoom + 10);
             updateZoom();
         });
         
-        document.getElementById('zoomOut').addEventListener('click', () => {
+        document.getElementById('zoomOut').addEventListener('click', function() {
             currentZoom = Math.max(50, currentZoom - 10);
             updateZoom();
         });
         
-        document.getElementById('exportBtn').addEventListener('click', () => {
+        document.getElementById('exportBtn').addEventListener('click', function() {
             vscode.postMessage({ type: 'export' });
         });
         
         function updateZoom() {
-            container.style.fontSize = currentZoom + '%';
+            body.style.setProperty('--zoom-factor', currentZoom / 100);
+            preview.style.transform = 'scale(' + (currentZoom / 100) + ')';
+            preview.style.transformOrigin = 'top left';
+            preview.style.width = (100 / (currentZoom / 100)) + '%';
             zoomLevelEl.textContent = currentZoom + '%';
         }
         
+        function renderToc() {
+            if (!currentToc || currentToc.length === 0) {
+                tocList.innerHTML = '<div class="toc-empty">No headings found</div>';
+                return;
+            }
+            
+            tocList.innerHTML = currentToc.map(function(item, i) {
+                return '<a href="#" class="toc-item toc-h' + item.level + '" data-line="' + item.line + '" data-index="' + i + '">' + escapeHtml(item.text) + '</a>';
+            }).join('');
+            
+            // Add click handlers
+            var items = tocList.querySelectorAll('.toc-item');
+            for (var i = 0; i < items.length; i++) {
+                items[i].addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var line = parseInt(this.getAttribute('data-line'));
+                    vscode.postMessage({ type: 'tocNavigate', line: line });
+                    
+                    // Highlight active item
+                    var allItems = tocList.querySelectorAll('.toc-item');
+                    for (var j = 0; j < allItems.length; j++) {
+                        allItems[j].classList.remove('active');
+                    }
+                    this.classList.add('active');
+                });
+            }
+        }
+        
+        function escapeHtml(text) {
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
         // Handle messages from extension
-        window.addEventListener('message', event => {
-            const message = event.data;
+        window.addEventListener('message', function(event) {
+            var message = event.data;
             
             switch (message.type) {
                 case 'update':
@@ -483,58 +522,50 @@ function getWebviewContent(context: vscode.ExtensionContext, webview: vscode.Web
                     
                     // Update theme
                     if (message.theme) {
-                        document.body.setAttribute('data-theme', message.theme);
+                        body.setAttribute('data-theme', message.theme);
                     }
                     
                     // Update frontmatter
                     if (message.frontmatter && Object.keys(message.frontmatter).length > 0) {
-                        frontmatterEl.innerHTML = Object.entries(message.frontmatter)
-                            .map(([key, value]) => \`<span class="fm-item"><strong>\${key}:</strong> \${value}</span>\`)
-                            .join('');
+                        var fmHtml = '';
+                        for (var key in message.frontmatter) {
+                            fmHtml += '<span class="fm-item"><strong>' + escapeHtml(key) + ':</strong> ' + escapeHtml(String(message.frontmatter[key])) + '</span>';
+                        }
+                        frontmatterEl.innerHTML = fmHtml;
                         frontmatterEl.style.display = 'flex';
                     } else {
                         frontmatterEl.style.display = 'none';
                     }
                     
                     // Update TOC
-                    if (message.toc && message.toc.length > 0) {
-                        tocList.innerHTML = message.toc.map((item, i) => 
-                            \`<a href="#" class="toc-item toc-h\${item.level}" data-line="\${item.line}">\${item.text}</a>\`
-                        ).join('');
-                        
-                        // Add click handlers
-                        tocList.querySelectorAll('.toc-item').forEach(el => {
-                            el.addEventListener('click', (e) => {
-                                e.preventDefault();
-                                const line = parseInt(el.dataset.line);
-                                vscode.postMessage({ type: 'tocNavigate', line });
-                            });
-                        });
-                    }
+                    currentToc = message.toc || [];
+                    renderToc();
                     
                     // Update stats
                     if (message.stats) {
-                        statsEl.innerHTML = \`\${message.stats.words} words · \${message.stats.chars} characters · \${message.stats.readTime} min read\`;
+                        statsEl.innerHTML = message.stats.words + ' words · ' + message.stats.chars + ' characters · ' + message.stats.readTime + ' min read';
                     }
                     
                     // Add line markers to headings for scroll sync
-                    preview.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading, i) => {
-                        if (message.toc[i]) {
-                            heading.dataset.line = message.toc[i].line;
+                    var headings = preview.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                    for (var i = 0; i < headings.length; i++) {
+                        if (currentToc[i]) {
+                            headings[i].setAttribute('data-line', currentToc[i].line);
+                            headings[i].id = 'heading-' + i;
                         }
-                    });
+                    }
                     break;
                     
                 case 'scrollSync':
                     if (scrollSyncEnabled) {
-                        const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+                        var scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
                         window.scrollTo(0, scrollHeight * message.percent);
                     }
                     break;
                     
                 case 'toggleTheme':
-                    const current = document.body.getAttribute('data-theme');
-                    document.body.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+                    var currentTheme = body.getAttribute('data-theme');
+                    body.setAttribute('data-theme', currentTheme === 'dark' ? 'light' : 'dark');
                     break;
                     
                 case 'zoom':
@@ -549,18 +580,18 @@ function getWebviewContent(context: vscode.ExtensionContext, webview: vscode.Web
         });
         
         // Scroll sync from preview to editor
-        let scrollTimeout;
-        window.addEventListener('scroll', () => {
+        var scrollTimeout;
+        window.addEventListener('scroll', function() {
             clearTimeout(scrollTimeout);
-            scrollTimeout = setTimeout(() => {
+            scrollTimeout = setTimeout(function() {
                 // Find the heading closest to the top of the viewport
-                const headings = preview.querySelectorAll('[data-line]');
-                for (const heading of headings) {
-                    const rect = heading.getBoundingClientRect();
+                var headings = preview.querySelectorAll('[data-line]');
+                for (var i = 0; i < headings.length; i++) {
+                    var rect = headings[i].getBoundingClientRect();
                     if (rect.top >= 0 && rect.top < 200) {
                         vscode.postMessage({ 
                             type: 'scrollToLine', 
-                            line: parseInt(heading.dataset.line) 
+                            line: parseInt(headings[i].getAttribute('data-line')) 
                         });
                         break;
                     }

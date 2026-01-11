@@ -139,16 +139,34 @@ body {
 .toc-h5 { padding-left: 64px; font-size: 11px; }
 .toc-h6 { padding-left: 76px; font-size: 11px; }
 
+.toc-item.active {
+    background: var(--accent-glow);
+    color: var(--accent);
+    border-left-color: var(--accent);
+}
+
+.toc-empty {
+    padding: 16px;
+    color: var(--ink-ghost);
+    font-style: italic;
+    font-size: 13px;
+}
+
 /* Container */
 .container {
     max-width: 800px;
     margin: 0 auto;
     padding: 60px 3rem 3rem;
-    transition: margin-left 0.25s ease;
+    transition: margin-left 0.25s ease, padding-left 0.25s ease;
 }
 
-.container.with-toc {
-    margin-left: 280px;
+body.toc-open .container {
+    margin-left: 260px;
+}
+
+/* Zoom support */
+:root {
+    --zoom-factor: 1;
 }
 
 /* Header */
