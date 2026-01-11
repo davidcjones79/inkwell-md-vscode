@@ -1,0 +1,313 @@
+/* Inkwell Markdown Preview - VS Code Extension */
+
+:root {
+    --paper: #1a1816;
+    --paper-light: #242120;
+    --ink: #f5f3f0;
+    --ink-faded: #a8a4a0;
+    --accent: #c9a87c;
+    --accent-light: #e8d5b5;
+    --font-body: 'Source Serif 4', Georgia, serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+}
+
+/* Light theme support */
+@media (prefers-color-scheme: light) {
+    :root {
+        --paper: #faf8f5;
+        --paper-light: #f0ebe4;
+        --ink: #1a1816;
+        --ink-faded: #5c5652;
+        --accent: #8b6914;
+        --accent-light: #6b5010;
+    }
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.75;
+    color: var(--ink);
+    background: var(--paper);
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 3rem;
+}
+
+header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 3px solid var(--accent);
+}
+
+.doc-title {
+    font-family: var(--font-body);
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+}
+
+#preview {
+    min-height: 100vh;
+}
+
+.empty-state {
+    color: var(--ink-faded);
+    font-style: italic;
+    text-align: center;
+    padding: 4rem 2rem;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-body);
+    color: var(--ink);
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    line-height: 1.3;
+}
+
+h1 {
+    font-size: 2.25rem;
+    font-weight: 700;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--accent);
+}
+
+h2 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+h3 {
+    font-size: 1.4rem;
+    font-weight: 600;
+}
+
+h4 {
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+h5 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--ink-faded);
+}
+
+h6 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ink-faded);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+p {
+    margin-bottom: 1.25rem;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+}
+
+a:hover {
+    border-bottom-color: var(--accent);
+}
+
+strong {
+    font-weight: 600;
+    color: var(--ink);
+}
+
+em {
+    font-style: italic;
+}
+
+/* Lists */
+ul, ol {
+    margin-bottom: 1.25rem;
+    padding-left: 1.5rem;
+}
+
+li {
+    margin-bottom: 0.5rem;
+}
+
+li > ul, li > ol {
+    margin-top: 0.5rem;
+    margin-bottom: 0;
+}
+
+/* Code */
+code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--paper-light);
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+    color: var(--accent-light);
+}
+
+pre {
+    background: var(--paper-light);
+    padding: 1.25rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin-bottom: 1.5rem;
+    border-left: 3px solid var(--accent);
+}
+
+pre code {
+    background: none;
+    padding: 0;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--ink);
+}
+
+/* Blockquotes */
+blockquote {
+    margin: 1.5rem 0;
+    padding: 1rem 1.5rem;
+    border-left: 4px solid var(--accent);
+    background: var(--paper-light);
+    font-style: italic;
+    color: var(--ink-faded);
+}
+
+blockquote p:last-child {
+    margin-bottom: 0;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+}
+
+th, td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--paper-light);
+}
+
+th {
+    font-weight: 600;
+    color: var(--ink-faded);
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    background: var(--paper-light);
+}
+
+tr:hover {
+    background: var(--paper-light);
+}
+
+/* Horizontal rule */
+hr {
+    border: none;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    margin: 2rem 0;
+}
+
+/* Images */
+img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    margin: 1rem 0;
+}
+
+/* Task lists */
+input[type="checkbox"] {
+    margin-right: 0.5rem;
+    accent-color: var(--accent);
+}
+
+/* Definition lists */
+dl {
+    margin-bottom: 1.25rem;
+}
+
+dt {
+    font-weight: 600;
+    margin-top: 1rem;
+}
+
+dd {
+    margin-left: 1.5rem;
+    color: var(--ink-faded);
+}
+
+/* Keyboard shortcuts */
+kbd {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--paper-light);
+    padding: 0.2em 0.5em;
+    border-radius: 4px;
+    border: 1px solid var(--ink-faded);
+    box-shadow: 0 2px 0 var(--ink-faded);
+}
+
+/* Abbreviations */
+abbr {
+    text-decoration: underline dotted;
+    cursor: help;
+}
+
+/* Mark/highlight */
+mark {
+    background: var(--accent);
+    color: var(--paper);
+    padding: 0.1em 0.3em;
+    border-radius: 2px;
+}
+
+/* Footnotes */
+.footnotes {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--paper-light);
+    font-size: 0.9rem;
+    color: var(--ink-faded);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--paper);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--ink-faded);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent);
+}
